@@ -1,9 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from services.llm_service.src.llm_model import generate_response
 from shared.utils.logger import setup_logger
-
-from .src.llm_model import generate_response
 
 logger = setup_logger()
 
@@ -13,6 +12,7 @@ app = FastAPI()
 class QuestionRequest(BaseModel):
     transcription: str
     question: str
+    title: str
 
 
 @app.post("/generate-response")
@@ -21,7 +21,9 @@ async def generate_response_endpoint(request: QuestionRequest):
         logger.info("Recibiendo solicitud para generar una respuesta.")
 
         # Generar la respuesta usando el modelo de IA
-        response = generate_response(request.transcription, request.question)
+        response = generate_response(
+            request.transcription, request.question, request.title
+        )
 
         logger.info("Proceso completado exitosamente.")
         return {"response": response}

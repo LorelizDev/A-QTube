@@ -1,39 +1,30 @@
 from transformers import pipeline
 
+from services.llm_service.src.cache import get_from_cache, save_to_cache
 from shared.utils.logger import setup_logger
-
-from .cache import get_from_cache, save_to_cache
 
 logger = setup_logger()
 
 model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-text_generator = pipeline("text-generation", model=model_name)
+text_generator = pipeline(
+    "text-generation",
+    model=model_name,
+    truncation=True,  # Habilitar truncamiento automático
+)
 
-PROMPT_TEMPLATE = """
-Eres un asistente especializado en responder preguntas sobre videos de YouTube.
-A continuación se proporciona la transcripción completa del video:
-
-TRANSCRIPCIÓN:
-{context}
-
-PREGUNTA DEL USUARIO:
-{question}
-
-INSTRUCCIONES ESENCIALES:
-1. Responde ÚNICAMENTE usando la información proporcionada en la transcripción.
-2. SI LA INFORMACIÓN NO ESTÁ EN LA TRANSCRIPCIÓN, RESPONDE: "Lo siento, esa información no se menciona en el video."
-3. NO INVENTES NINGÚN DETALLE NI USES CONOCIMIENTO EXTERNO.
-4. Proporciona una respuesta clara, concisa y directamente relacionada con la pregunta.
-
-Tu respuesta:
-"""
+PROMPT_TEMPLATE = """Contexto: {context}
+Título del video: {title}
+Pregunta: {question}
+Instrucción: Responde brevemente usando solo la información del contexto.
+Si no está la información, di: Lo siento, esa información no se menciona en el video.
+Respuesta:"""
 
 
-def create_prompt(question: str, context: str) -> str:
-    return PROMPT_TEMPLATE.format(question=question, context=context)
+def create_prompt(question: str, context: str, title: str) -> str:
+    return PROMPT_TEMPLATE.format(question=question, context=context, title=title)
 
 
-def generate_response(transcription, question):
+def generate_response(transcription, question, title):
     try:
         # Generar una clave única para la pregunta
         cache_key = f"{transcription[:50]}:{question}"
@@ -45,17 +36,28 @@ def generate_response(transcription, question):
 
         logger.info(f"Generando respuesta para la pregunta: {question}")
 
-        prompt = create_prompt(question=question, context=transcription)
+        # Limitar el contexto a aproximadamente 1500 caracteres
+        if len(transcription) > 1500:
+            transcription = transcription[:1500] + "..."
 
-        response = text_generator(prompt, max_new_tokens=50)[0]["generated_text"]
+        prompt = create_prompt(question=question, context=transcription, title=title)
+
+        logger.info(f"Prompt generado con título: {title}")
+
+        response = text_generator(
+            prompt,
+            max_new_tokens=100,
+            num_return_sequences=1,
+            pad_token_id=text_generator.tokenizer.eos_token_id,
+            do_sample=True,
+            temperature=0.3,
+            top_p=0.9,
+            repetition_penalty=1.2,
+            no_repeat_ngram_size=3,
+        )[0]["generated_text"]
 
         # Extraer y limpiar la respuesta generada
-        response = response.split("Tu respuesta:")[-1].strip()
-
-        # Limpiar cualquier texto adicional del prompt que pueda aparecer
-        for word in ["PREGUNTA", "INSTRUCCIONES", "TRANSCRIPCIÓN"]:
-            if word in response:
-                response = response.split(word)[0].strip()
+        response = response.split("Respuesta:")[-1].strip()
 
         save_to_cache(cache_key, response)
 
