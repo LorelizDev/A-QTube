@@ -51,5 +51,12 @@ def extract_video_id(url):
     """Extrae el ID del video de la URL de YouTube."""
     from urllib.parse import parse_qs, urlparse
 
-    query = urlparse(url).query
+    parsed_url = urlparse(url)
+
+    # Maneja enlaces cortos de youtu.be
+    if "youtu.be" in parsed_url.netloc:
+        return parsed_url.path.strip("/")
+
+    # Maneja enlaces tradicionales de youtube.com
+    query = parsed_url.query
     return parse_qs(query).get("v", [None])[0]
