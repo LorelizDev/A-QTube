@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  video-processor:
+    build:
+      context: .
+      dockerfile: services/video_processor/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services/video_processor/downloads:/app/services/video_processor/downloads
+    depends_on:
+      - redis
+
+  llm-service:
+    build:
+      context: .
+      dockerfile: services/llm_service/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: services/telegram_bot/Dockerfile
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - VIDEO_PROCESSOR_URL=http://video-processor:8000/process-video
+      - LLM_SERVICE_URL=http://llm-service:8001/generate-response
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    depends_on:
+      - redis
+      - video-processor
+      - llm-service
+
+volumes:
+  redis_data:

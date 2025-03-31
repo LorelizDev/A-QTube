@@ -14,9 +14,10 @@ def download_audio(url, output_path="downloads/"):
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
+            video_title = info["title"]
             file_path = ydl.prepare_filename(info)
         logger.info(f"Audio descargado en: {file_path}")
-        return file_path
+        return file_path, video_title
     except Exception as e:
         logger.error(f"Error al descargar el audio: {str(e)}")
         raise
